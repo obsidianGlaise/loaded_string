@@ -46,7 +46,6 @@ struct Sys {
     masses: Vec<Mass>,
 }
 
-#[allow(dead_code)]
 impl Sys {
     fn new(m: usize, size: usize, displacement: f64) -> Sys {
         let mut new_system = Sys { masses: vec![Mass::new(0.0);size] };
@@ -79,30 +78,6 @@ impl Sys {
                 self.masses[i].update_acceleration(l,r);
             }
         }
-    }
-
-    fn get_position(&self) -> Vec<(f64,f64)> {
-        let mut v: Vec<(f64,f64)> = vec![];
-        for m in 0..self.masses.len() {
-            v.push((m as f64+1.0, self.masses[m].pos));
-        }
-        return v;
-    }
-
-    fn get_accel(&self) -> Vec<(f64,f64)> {
-        let mut v: Vec<(f64,f64)> = vec![];
-        for m in 0..self.masses.len() {
-            v.push((m as f64+1.0, self.masses[m].accel));
-        }
-        return v;
-    }
-
-    fn size(&self) -> f64 {
-        return self.masses.len() as f64 + 1.0;
-    }
-
-    fn alter_system(&mut self, mass_to_alter: usize, transform_mass: Mass) {
-        self.masses[mass_to_alter] = transform_mass.clone();
     }
 }
 
