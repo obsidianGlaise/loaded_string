@@ -119,36 +119,45 @@ impl SystemPlot {
     fn line_points(&self) -> Line {
         let n = self.size;
         let points = (0..n+2).map(|i| {
-            //let t = remap(i as f64, 0.0..=(n as f64), 0.0..=TAU);
-            //let r = 1.0;
-            if i == 0 || i == n+1 {
+            /*if i == 0 || i == n+1 {
                 Value::new(
-                    i as f64,//r * t.cos() + 0.0 as f64,
-                    0.0,//r * t.sin() + 0.0 as f64,
+                    (i/(n+1)) as f64,
+                    0.0,
                 )
             }
             else {
                 Value::new(
-                    i as f64,//r * t.cos() + 0.0 as f64,
-                    self.system.masses[i-1].pos,//r * t.sin() + 0.0 as f64,
+                    (i/(n+1)) as f64,
+                    self.system.masses[i-1].pos,
+                )
+            }*/
+            if i == 0 || i == n+1 {
+                Value::new(
+                    (i as f64)/((n+1) as f64),
+                    0.0,
+                )    
+            }
+            else {
+                Value::new(
+                    (i as f64)/((n+1) as f64),
+                    self.system.masses[i-1].pos,
                 )
             }
         });
+        
         Line::new(Values::from_values_iter(points))
-            .color(Color32::from_rgb(100, 200, 100))
-            .style(LineStyle::Solid)
-            .name("mass")
+        .color(Color32::from_rgb(100, 200, 100))
+        .style(LineStyle::Solid)
+        .name("mass")
     }
+
     fn circle_points(&self, radius: f32) -> Points {
         let marker = MarkerShape::Circle;
-        //let points: Vec<Points> = vec![];
         let n = self.size;
         let circle = (0..n).map(|i| {
-            //let t = remap(i as f64, 0.0..=(n as f64), 0.0..=TAU);
-            //let r = 1.0;
             Value::new(
-                i as f64 + 1.0,//r * t.cos() + 0.0 as f64,
-                self.system.masses[i].pos,//r * t.sin() + 0.0 as f64,
+                (i as f64 + 1.0)/((n+1) as f64),
+                self.system.masses[i].pos,
             )
         });
         Points::new(Values::from_values_iter(circle))
@@ -165,7 +174,7 @@ impl epi::App for SystemPlot {
         "Loaded String Simulation"
     }
 
-    /// Called once before the first frame.
+    // Called once before the first frame.
     fn setup(
         &mut self,
         _ctx: &egui::Context,
@@ -214,14 +223,21 @@ impl epi::App for SystemPlot {
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
                 ui.spacing_mut().item_spacing.y = 0.0;
-                if ui.button("Increment").clicked() {
+                if ui.button("Increment").clicked() && *size < 300 {
                     *size += 1;
                 }
-                if ui.button("Decrement").clicked() {
+                if ui.button("Decrement").clicked() && *size > 1 {
                     *size -= 1;
                 }
             });
-            let popup_id = ui.make_persistent_id("my_unique_id");
+            while *size > system.masses.len() {
+                system.masses.push(Mass::new(0.0));
+            }
+            while *size < system.masses.len() {
+                system.masses.pop();
+            }
+
+            let popup_id = ui.make_persistent_id("harmonic_popup");
             let response = ui.button("Harmonic state");
             if response.clicked() {    
                 self.animate = false;
@@ -230,8 +246,6 @@ impl epi::App for SystemPlot {
             }
             egui::popup::popup_below_widget(ui, popup_id, &response, |ui| {
                 ui.set_min_width(200.0); // if you want to control the size
-                ui.label("Some more info, or things you can select:");
-                ui.label("…");
                 ui.add(egui::DragValue::new(&mut self.initial_displacement).speed(0.1).clamp_range(0.0..=f64::INFINITY).prefix("Initial Displacement: "));
                 if ui.button("Start").clicked() {
                     system.harmonic_state(self.initial_displacement);
@@ -244,12 +258,6 @@ impl epi::App for SystemPlot {
                 self.animate = !self.animate;
             }
             ui.add(egui::DragValue::new(&mut self.radius).speed(0.1).clamp_range(0.0..=f64::INFINITY).prefix("Mass radius (display): "));
-            while *size > system.masses.len() {
-                system.masses.push(Mass::new(0.0));
-            }
-            while *size < system.masses.len() {
-                system.masses.pop();
-            }
 
             egui::ScrollArea::vertical().show(ui, |ui| {
                 for i in 0..*size {
@@ -274,27 +282,18 @@ impl epi::App for SystemPlot {
             if self.animate {
                 ui.ctx().request_repaint();
             };
-            let plot = Plot::new("Loaded String").legend(Legend::default()).view_aspect(1.0);
+            let plot = Plot::new("Loaded String").legend(Legend::default()).view_aspect(1.0).data_aspect(1.0);
             
             plot.show(ui, |plot_ui| {
                 plot_ui.line(self.line_points());
                 
                 plot_ui.points(self.circle_points(self.radius));
                 plot_ui.vline(VLine::new(0).color(RED));
-                plot_ui.vline(VLine::new(self.size as f64+1.0).color(RED));
+                plot_ui.vline(VLine::new(1).color(RED));
             });
             
             egui::warn_if_debug_build(ui);
         });
-        
-        if false {
-            egui::Window::new("Window").show(ctx, |ui| {
-                ui.label("Windows can be moved by dragging them.");
-                ui.label("They are automatically sized based on contents.");
-                ui.label("You can turn on resizing and scrolling if you like.");
-                ui.label("You would normally chose either panels OR windows.");
-            });
-        }
         if self.animate {
             self.system.update_system(self.time);
             self.time += DELTA;
