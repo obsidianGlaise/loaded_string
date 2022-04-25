@@ -1,3 +1,4 @@
+/*
 #[cfg(windows)]
 extern crate winres;
 
@@ -10,4 +11,11 @@ fn main() {
 
 #[cfg(unix)]
 fn main() {
+}
+
+#[cfg(wasm32)]
+fn main() { 
+}*/
+fn main() {
+    
 }

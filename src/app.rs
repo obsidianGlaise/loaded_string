@@ -2,8 +2,8 @@ use eframe::egui::plot::*;
 use eframe::epaint::Color32;
 use eframe::{egui, epi};
 
-const DELTA: f64 = 0.1;
-const DELTA_SQUARE: f64 = 0.01;
+//const DELTA: f64 = 0.1;
+//const DELTA_SQUARE: f64 = 0.01;
 const RED: Color32 = Color32::from_rgb(255, 0, 0);
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
@@ -24,14 +24,14 @@ impl Mass {
         };
     }
 
-    fn update_position(&mut self, t: f64) {
+    fn update_position(&mut self, t: f64, delta: f64) {
         if t == 0.0 {
             self.past_pos = self.pos;
-        } else if t == DELTA {
-            self.pos = self.past_pos + 0.5 * self.accel * DELTA_SQUARE;
+        } else if t == delta {
+            self.pos = self.past_pos + 0.5 * self.accel * square(delta);
         } else {
             let cur = self.pos;
-            self.pos = 2.0 * cur - self.past_pos + self.accel * DELTA_SQUARE;
+            self.pos = 2.0 * cur - self.past_pos + self.accel * square(delta);
             self.past_pos = cur;
         }
         //if f64::abs(self.pos) > 1.0 { println!("Mass exceeded initial displacement"); }
@@ -56,9 +56,9 @@ impl Sys {
         return new_system;
     }
 
-    fn update_system(&mut self, time_step: f64) {
+    fn update_system(&mut self, time_step: f64, delta: f64) {
         for i in 0..self.masses.len() {
-            self.masses[i].update_position(time_step);
+            self.masses[i].update_position(time_step,delta);
         }
         for i in 0..self.masses.len() {
             if i == 0 {
@@ -103,6 +103,7 @@ pub struct SystemPlot {
     initial_displacement: f64,
     clamped: bool,
     max_time: f64,
+    delta: f64,
 }
 
 impl Default for SystemPlot {
@@ -116,6 +117,7 @@ impl Default for SystemPlot {
             initial_displacement: 1.0,
             clamped: false,
             max_time: 100.0,
+            delta: 0.1,
         }
     }
 }
@@ -207,8 +209,8 @@ impl epi::App for SystemPlot {
             }
 
             ui.add(egui::Slider::new(size, 1..=300).text("Masses"));
+            ui.add(egui::DragValue::new(&mut self.delta).clamp_range(0.001..=0.750).speed(0.001).prefix("Delta: "));
             ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 0.0;
                 ui.spacing_mut().item_spacing.y = 0.0;
                 if ui.button("Increment").clicked() && *size < 300 {
                     *size += 1;
@@ -269,15 +271,14 @@ impl epi::App for SystemPlot {
                 }
             });
             ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 0.0;
                 ui.spacing_mut().item_spacing.y = 0.0;
                 if ui.button("Animate").clicked() {
                     self.animate = !self.animate;
                 }
                 if ui.button("Step").clicked() {
                     self.animate = false;
-                    system.update_system(self.time);
-                    self.time += DELTA;
+                    system.update_system(self.time,self.delta);
+                    self.time += self.delta;
                 }
             });
             ui.add(
@@ -322,9 +323,11 @@ impl epi::App for SystemPlot {
             if self.time >= self.max_time && self.clamped {
                 self.animate = false;
             } else {
-                self.system.update_system(self.time);
-                self.time += DELTA;
+                self.system.update_system(self.time,self.delta);
+                self.time += self.delta;
             }
         }
+
+        //thread::sleep(time::Duration::from_millis(self.delay));
     }
 }
