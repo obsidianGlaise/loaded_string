@@ -83,9 +83,9 @@ impl Sys {
         let base = if self.masses.len() % 2 == 0 { 0.5 } else { 0.0 };
         let spacing = (self.masses.len() + (self.masses.len() % 2)) as f64;
         for i in 0..self.masses.len() {
-            let pos = -1.0 / square(spacing / 2.0) * square(i as f64 + 1.0 - base - spacing / 2.0)
-                + height;
-            self.masses[i] = Mass::new(pos);
+            let pos =
+                -1.0 / square(spacing / 2.0) * square(i as f64 + 1.0 - base - spacing / 2.0) + 1.0;
+            self.masses[i] = Mass::new(pos * height);
         }
     }
 }
@@ -101,6 +101,8 @@ pub struct SystemPlot {
     size: usize,
     radius: f32,
     initial_displacement: f64,
+    clamped: bool,
+    max_time: f64,
 }
 
 impl Default for SystemPlot {
@@ -112,6 +114,8 @@ impl Default for SystemPlot {
             size: 10,
             radius: 5.0,
             initial_displacement: 1.0,
+            clamped: false,
+            max_time: 100.0,
         }
     }
 }
@@ -120,18 +124,6 @@ impl SystemPlot {
     fn line_points(&self) -> Line {
         let n = self.size;
         let points = (0..n + 2).map(|i| {
-            /*if i == 0 || i == n+1 {
-                Value::new(
-                    (i/(n+1)) as f64,
-                    0.0,
-                )
-            }
-            else {
-                Value::new(
-                    (i/(n+1)) as f64,
-                    self.system.masses[i-1].pos,
-                )
-            }*/
             if i == 0 || i == n + 1 {
                 Value::new((i as f64) / ((n + 1) as f64), 0.0)
             } else {
@@ -205,6 +197,7 @@ impl epi::App for SystemPlot {
 
         egui::SidePanel::left("side_panel").show(ctx, |ui| {
             ui.heading("Side Panel");
+            ui.label(format!("Time: {:.1}", self.time));
 
             if ui.button("Reset").clicked() {
                 self.animate = false;
@@ -251,9 +244,42 @@ impl epi::App for SystemPlot {
                 }
             });
 
-            if ui.button("Animate").clicked() {
-                self.animate = !self.animate;
+            let time_popup = ui.make_persistent_id("max_time_popup");
+            let time_response = ui.button("Clamped");
+            if time_response.clicked() {
+                self.animate = false;
+                self.time = 0.0;
+                ui.memory().toggle_popup(time_popup);
             }
+            egui::popup::popup_below_widget(ui, time_popup, &time_response, |ui| {
+                ui.set_min_width(200.0); // if you want to control the size
+                ui.add(
+                    egui::DragValue::new(&mut self.max_time)
+                        .speed(0.1)
+                        .clamp_range(0.0..=f64::INFINITY)
+                        .prefix("Max Time: "),
+                );
+                let t = if self.clamped {
+                    "disable".to_string()
+                } else {
+                    "enable".to_string()
+                };
+                if ui.button(t).clicked() {
+                    self.clamped = !self.clamped;
+                }
+            });
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 0.0;
+                ui.spacing_mut().item_spacing.y = 0.0;
+                if ui.button("Animate").clicked() {
+                    self.animate = !self.animate;
+                }
+                if ui.button("Step").clicked() {
+                    self.animate = false;
+                    system.update_system(self.time);
+                    self.time += DELTA;
+                }
+            });
             ui.add(
                 egui::DragValue::new(&mut self.radius)
                     .speed(0.1)
@@ -265,19 +291,9 @@ impl epi::App for SystemPlot {
                 for i in 0..*size {
                     ui.add(
                         egui::Slider::new(&mut system.masses[i].pos, -10.0..=10.0)
-                            .text(format!("Node {} position", i)),
+                            .text(format!("{}: ", i)),
                     );
                 }
-            });
-
-            ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 0.0;
-                    ui.label("powered by ");
-                    ui.hyperlink_to("egui", "https://github.com/emilk/egui");
-                    ui.label(" and ");
-                    ui.hyperlink_to("eframe", "https://github.com/emilk/egui/tree/master/eframe");
-                });
             });
         });
 
@@ -289,6 +305,8 @@ impl epi::App for SystemPlot {
                 .legend(Legend::default())
                 .view_aspect(1.0)
                 .data_aspect(1.0);
+            //.center_x_axis(true)
+            //.center_y_axis(true);
 
             plot.show(ui, |plot_ui| {
                 plot_ui.line(self.line_points());
@@ -301,8 +319,12 @@ impl epi::App for SystemPlot {
             egui::warn_if_debug_build(ui);
         });
         if self.animate {
-            self.system.update_system(self.time);
-            self.time += DELTA;
+            if self.time >= self.max_time && self.clamped {
+                self.animate = false;
+            } else {
+                self.system.update_system(self.time);
+                self.time += DELTA;
+            }
         }
     }
 }
