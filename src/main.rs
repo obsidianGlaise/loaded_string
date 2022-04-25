@@ -6,7 +6,7 @@
 // When compiling natively:
 #[cfg(not(target_arch = "wasm32"))]
 fn main() {
-    let app = loaded_string::TemplateApp::default();
+    let app = loaded_string::SystemPlot::default();//TemplateApp::default();
     let native_options = eframe::NativeOptions::default();
     eframe::run_native(Box::new(app), native_options);
 }

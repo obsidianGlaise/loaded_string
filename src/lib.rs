@@ -3,7 +3,7 @@
 #![warn(clippy::all, rust_2018_idioms)]
 
 mod app;
-pub use app::TemplateApp;
+pub use app::SystemPlot;
 
 // ----------------------------------------------------------------------------
 // When compiling for web:
@@ -27,3 +27,4 @@ pub fn start(canvas_id: &str) -> Result<(), eframe::wasm_bindgen::JsValue> {
     let app = TemplateApp::default();
     eframe::start_web(canvas_id, Box::new(app))
 }
+
