@@ -79,7 +79,19 @@ impl Sys {
             }
         }
     }
+
+    fn harmonic_state(&mut self, height: f64) {
+        let base = if self.masses.len() % 2 == 0 { 0.5 } else { 0.0 };
+        let spacing = (self.masses.len() + (self.masses.len() % 2)) as f64;
+        for i in 0..self.masses.len() {
+            let pos = -1.0/square(spacing/2.0) * square(i as f64+1.0 - base - spacing/2.0)+height;
+            self.masses[i] = Mass::new(pos);
+        }
+        
+    }
 }
+
+fn square(val: f64) -> f64 { val*val }
 
 pub struct SystemPlot {
     animate: bool,
@@ -87,6 +99,7 @@ pub struct SystemPlot {
     system: Sys,
     size: usize,
     radius: f32,
+    initial_displacement: f64,
 }
 
 impl Default for SystemPlot {
@@ -96,7 +109,8 @@ impl Default for SystemPlot {
             time: 0.0,
             system: Sys::new(0,10,1.0),
             size: 10,
-            radius: 5.0
+            radius: 5.0,
+            initial_displacement: 1.0
         }
     }
 }
@@ -175,11 +189,6 @@ impl epi::App for SystemPlot {
             ..
         } = self;
 
-        // Examples of how to create different panels and windows.
-        // Pick whichever suits you.
-        // Tip: a good default choice is to just keep the `CentralPanel`.
-        // For inspiration and more examples, go to https://emilk.github.io/egui
-
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             // The top panel is often a good place for a menu bar:
             egui::menu::bar(ui, |ui| {
@@ -202,16 +211,39 @@ impl epi::App for SystemPlot {
             }
 
             ui.add(egui::Slider::new(size, 1..=300).text("Masses"));
-            if ui.button("Increment").clicked() {
-                *size += 1;
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 0.0;
+                ui.spacing_mut().item_spacing.y = 0.0;
+                if ui.button("Increment").clicked() {
+                    *size += 1;
+                }
+                if ui.button("Decrement").clicked() {
+                    *size -= 1;
+                }
+            });
+            let popup_id = ui.make_persistent_id("my_unique_id");
+            let response = ui.button("Harmonic state");
+            if response.clicked() {    
+                self.animate = false;
+                self.time = 0.0;
+                ui.memory().toggle_popup(popup_id);
             }
-            if ui.button("Decrement").clicked() {
-                *size -= 1;
-            }
+            egui::popup::popup_below_widget(ui, popup_id, &response, |ui| {
+                ui.set_min_width(200.0); // if you want to control the size
+                ui.label("Some more info, or things you can select:");
+                ui.label("…");
+                ui.add(egui::DragValue::new(&mut self.initial_displacement).speed(0.1).clamp_range(0.0..=f64::INFINITY).prefix("Initial Displacement: "));
+                if ui.button("Start").clicked() {
+                    system.harmonic_state(self.initial_displacement);
+                    
+                }
+            });
+
+
             if ui.button("Animate").clicked() {
                 self.animate = !self.animate;
             }
-            ui.add(egui::Slider::new(&mut self.radius, 0.0..=10.0).text("Mass radius (display)"));
+            ui.add(egui::DragValue::new(&mut self.radius).speed(0.1).clamp_range(0.0..=f64::INFINITY).prefix("Mass radius (display): "));
             while *size > system.masses.len() {
                 system.masses.push(Mass::new(0.0));
             }
@@ -219,14 +251,12 @@ impl epi::App for SystemPlot {
                 system.masses.pop();
             }
 
-            //ui.add(egui::Slider::new(&mut self.time, 0.0..=10.0).text("Time"));
             egui::ScrollArea::vertical().show(ui, |ui| {
-                // Add a lot of widgets here.
                 for i in 0..*size {
                     ui.add(egui::Slider::new(&mut system.masses[i].pos, -10.0..=10.0).text(format!("Node {} position", i)));
                 }
             });
-            //ui.collapsing("Heading", |ui| { ui.label("Contents"); });
+            
             
             
             ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
