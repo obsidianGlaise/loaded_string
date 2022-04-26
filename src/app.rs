@@ -48,6 +48,8 @@ impl Mass {
     }
 }
 
+#[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
+#[cfg_attr(feature = "persistence", serde(default))] // if we add new fields, give them default values when deserializing old state
 #[derive(Debug, Clone)]
 struct Sys {
     masses: Vec<Mass>,
@@ -108,6 +110,9 @@ fn square(val: f64) -> f64 {
     val * val
 }
 
+#[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
+#[cfg_attr(feature = "persistence", serde(default))] // if we add new fields, give them default values when deserializing old state
+#[derive(Debug, Clone)]
 pub struct SystemPlot {
     animate: bool,
     time: f64,
