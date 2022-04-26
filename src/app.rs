@@ -40,7 +40,6 @@ impl Mass {
             self.pos = 2.0 * cur - self.past_pos + self.accel * square(delta);
             self.past_pos = cur;
         }
-        //if f64::abs(self.pos) > 1.0 { println!("Mass exceeded initial displacement"); }
     }
 
     fn update_acceleration(&mut self, l_pos: f64, r_pos: f64) {
@@ -96,6 +95,15 @@ impl Sys {
             self.masses[i] = Mass::new(pos * height);
         }
     }
+
+    fn pluck(&mut self, height: f64) {
+        let n = self.masses.len();
+        for i in 0..n {
+            let pos = -2.0 * f64::abs(((i + 1) as f64 / (n as f64 + 1.0)) - 0.5) + 1.0;
+
+            self.masses[i] = Mass::new(pos * height);
+        }
+    }
 }
 
 impl Default for Sys {
@@ -109,7 +117,9 @@ impl Default for Sys {
 fn square(val: f64) -> f64 {
     val * val
 }
-
+fn round(val: f64, rounding_factor: f64) -> f64 {
+    f64::floor(val / rounding_factor) * rounding_factor
+}
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "persistence", serde(default))] // if we add new fields, give them default values when deserializing old state
 #[derive(Debug, Clone)]
@@ -159,7 +169,6 @@ impl SystemPlot {
     }
 
     fn circle_points(&self, radius: f32) -> Points {
-        let marker = MarkerShape::Circle;
         let n = self.size;
         let circle = (0..n).map(|i| {
             Value::new(
@@ -171,7 +180,7 @@ impl SystemPlot {
             .name("mass")
             .filled(true)
             .radius(radius)
-            .shape(marker)
+            .shape(MarkerShape::Circle)
             .color(Color32::from_rgb(100, 200, 100))
     }
 }
@@ -217,109 +226,95 @@ impl epi::App for SystemPlot {
         });
 
         egui::SidePanel::left("side_panel").show(ctx, |ui| {
+            ui.set_min_width(225.0);
             ui.heading("Side Panel");
             ui.label(format!("Time: {:.1}", self.time));
-
-            if ui.button("Reset").clicked() {
-                self.animate = false;
-                *system = Sys::new(0, 10, 1.0);
-                *size = 10;
-                self.time = 0.0;
-            }
-
-            ui.add(egui::Slider::new(size, 1..=300).text("Masses"));
-            ui.add(
-                egui::DragValue::new(&mut self.delta)
-                    .clamp_range(0.001..=0.750)
-                    .speed(0.001)
-                    .prefix("Delta: "),
-            );
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.y = 0.0;
-                if ui.button("Increment").clicked() && *size < 300 {
-                    *size += 1;
+            egui::CollapsingHeader::new("Basic Settings").show(ui, |ui| {
+                if ui.button("Reset").clicked() {
+                    self.animate = false;
+                    *system = Sys::new(0, 10, 1.0);
+                    *size = 10;
+                    self.time = 0.0;
                 }
-                if ui.button("Decrement").clicked() && *size > 1 {
-                    *size -= 1;
-                }
-            });
-            while *size > system.masses.len() {
-                system.masses.push(Mass::new(0.0));
-            }
-            while *size < system.masses.len() {
-                system.masses.pop();
-            }
-
-            let popup_id = ui.make_persistent_id("harmonic_popup");
-            let response = ui.button("Harmonic state");
-            if response.clicked() {
-                self.animate = false;
-                self.time = 0.0;
-                ui.memory().toggle_popup(popup_id);
-            }
-            egui::popup::popup_below_widget(ui, popup_id, &response, |ui| {
-                ui.set_min_width(200.0); // if you want to control the size
+                ui.add(egui::Slider::new(size, 1..=300).text("Masses"));
+                ui.horizontal(|ui| {
+                    if ui.button("Increment").clicked() && *size < 300 {
+                        *size += 1;
+                    }
+                    if ui.button("Decrement").clicked() && *size > 1 {
+                        *size -= 1;
+                    }
+                });
                 ui.add(
-                    egui::DragValue::new(&mut self.initial_displacement)
-                        .speed(0.1)
-                        .clamp_range(0.0..=f64::INFINITY)
-                        .prefix("Initial Displacement: "),
+                    egui::DragValue::new(&mut self.delta)
+                        .clamp_range(0.001..=0.750)
+                        .speed(0.001)
+                        .prefix("Delta: "),
                 );
-                if ui.button("Start").clicked() {
-                    system.harmonic_state(self.initial_displacement);
-                }
-            });
-
-            let time_popup = ui.make_persistent_id("max_time_popup");
-            let time_response = ui.button("Clamped");
-            if time_response.clicked() {
-                self.animate = false;
-                self.time = 0.0;
-                ui.memory().toggle_popup(time_popup);
-            }
-            egui::popup::popup_below_widget(ui, time_popup, &time_response, |ui| {
-                ui.set_min_width(200.0); // if you want to control the size
-                ui.add(
-                    egui::DragValue::new(&mut self.max_time)
-                        .speed(0.1)
-                        .clamp_range(0.0..=f64::INFINITY)
-                        .prefix("Max Time: "),
-                );
-                let t = if self.clamped {
-                    "disable".to_string()
-                } else {
-                    "enable".to_string()
-                };
-                if ui.button(t).clicked() {
-                    self.clamped = !self.clamped;
-                }
-            });
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.y = 0.0;
-                if ui.button("Animate").clicked() {
-                    self.animate = !self.animate;
-                }
+                ui.checkbox(&mut self.animate, "Animate");
                 if ui.button("Step").clicked() {
                     self.animate = false;
                     system.update_system(self.time, self.delta);
                     self.time += self.delta;
                 }
             });
-            ui.add(
-                egui::DragValue::new(&mut self.radius)
-                    .speed(0.1)
-                    .clamp_range(0.0..=f64::INFINITY)
-                    .prefix("Mass radius (display): "),
-            );
 
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                for i in 0..*size {
-                    ui.add(
-                        egui::Slider::new(&mut system.masses[i].pos, -10.0..=10.0)
-                            .text(format!("{}: ", i)),
-                    );
+            while *size > system.masses.len() {
+                system.masses.push(Mass::new(0.0));
+            }
+            while *size < system.masses.len() {
+                system.masses.pop();
+            }
+            egui::CollapsingHeader::new("Display Settings").show(ui, |ui| {
+                ui.add(
+                    egui::DragValue::new(&mut self.radius)
+                        .speed(0.1)
+                        .clamp_range(0.0..=100.0)
+                        .prefix("Mass radius (display): "),
+                );
+            });
+            egui::CollapsingHeader::new("Misc State Settings").show(ui, |ui| {
+                ui.add(
+                    egui::DragValue::new(&mut self.initial_displacement)
+                        .speed(0.1)
+                        .clamp_range(0.0..=f64::INFINITY)
+                        .prefix("Initial Displacement: "),
+                );
+                if ui.button("First Harmonic").clicked() {
+                    self.animate = false;
+                    *system = Sys::new(0, *size, 0.0);
+                    self.time = 0.0;
+                    system.harmonic_state(self.initial_displacement);
+                }
+                if ui.button("Pluck").clicked() {
+                    self.animate = false;
+                    *system = Sys::new(0, *size, 0.0);
+                    self.time = 0.0;
+                    system.pluck(self.initial_displacement);
                 }
             });
+
+            egui::CollapsingHeader::new("Clamped Settings").show(ui, |ui| {
+                ui.add(
+                    egui::DragValue::new(&mut self.max_time)
+                        .speed(0.1)
+                        .clamp_range(0.0..=f64::INFINITY)
+                        .prefix("Max Time: "),
+                );
+                ui.checkbox(&mut self.clamped, "Clamped");
+            });
+
+            egui::CollapsingHeader::new("Mass positions").show(ui, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    for i in 0..*size {
+                        ui.add(
+                            egui::Slider::new(&mut system.masses[i].pos, -10.0..=10.0)
+                                .text(format!("{}: ", i)),
+                        );
+                    }
+                })
+            });
+            egui::warn_if_debug_build(ui);
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -330,28 +325,21 @@ impl epi::App for SystemPlot {
                 .legend(Legend::default())
                 .view_aspect(1.0)
                 .data_aspect(1.0);
-            //.center_x_axis(true)
-            //.center_y_axis(true);
 
             plot.show(ui, |plot_ui| {
                 plot_ui.line(self.line_points());
-
                 plot_ui.points(self.circle_points(self.radius));
                 plot_ui.vline(VLine::new(0).color(RED));
                 plot_ui.vline(VLine::new(1).color(RED));
             });
-
-            egui::warn_if_debug_build(ui);
         });
         if self.animate {
-            if self.time >= self.max_time && self.clamped {
+            if round(self.time, self.delta) >= self.max_time && self.clamped {
                 self.animate = false;
             } else {
                 self.system.update_system(self.time, self.delta);
                 self.time += self.delta;
             }
         }
-
-        //thread::sleep(time::Duration::from_millis(self.delay));
     }
 }
