@@ -2,8 +2,6 @@ use eframe::egui::plot::*;
 use eframe::epaint::Color32;
 use eframe::{egui, epi};
 
-//const DELTA: f64 = 0.1;
-//const DELTA_SQUARE: f64 = 0.01;
 const RED: Color32 = Color32::from_rgb(255, 0, 0);
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
@@ -14,14 +12,22 @@ struct Mass {
     past_pos: f64,
     accel: f64,
 }
-
+impl Default for Mass {
+    fn default() -> Self {
+        Self {
+            pos: 0.0,
+            past_pos: 0.0,
+            accel: 0.0,
+        }
+    }
+}
 impl Mass {
     fn new(p: f64) -> Mass {
-        return Mass {
+        Mass {
             pos: p,
             past_pos: p,
             accel: 0.0,
-        };
+        }
     }
 
     fn update_position(&mut self, t: f64, delta: f64) {
@@ -53,12 +59,12 @@ impl Sys {
             masses: vec![Mass::new(0.0); size],
         };
         new_system.masses[m].pos = displacement;
-        return new_system;
+        new_system
     }
 
     fn update_system(&mut self, time_step: f64, delta: f64) {
         for i in 0..self.masses.len() {
-            self.masses[i].update_position(time_step,delta);
+            self.masses[i].update_position(time_step, delta);
         }
         for i in 0..self.masses.len() {
             if i == 0 {
@@ -86,6 +92,14 @@ impl Sys {
             let pos =
                 -1.0 / square(spacing / 2.0) * square(i as f64 + 1.0 - base - spacing / 2.0) + 1.0;
             self.masses[i] = Mass::new(pos * height);
+        }
+    }
+}
+
+impl Default for Sys {
+    fn default() -> Self {
+        Self {
+            masses: vec![Mass::new(1.0)],
         }
     }
 }
@@ -209,7 +223,12 @@ impl epi::App for SystemPlot {
             }
 
             ui.add(egui::Slider::new(size, 1..=300).text("Masses"));
-            ui.add(egui::DragValue::new(&mut self.delta).clamp_range(0.001..=0.750).speed(0.001).prefix("Delta: "));
+            ui.add(
+                egui::DragValue::new(&mut self.delta)
+                    .clamp_range(0.001..=0.750)
+                    .speed(0.001)
+                    .prefix("Delta: "),
+            );
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.y = 0.0;
                 if ui.button("Increment").clicked() && *size < 300 {
@@ -277,7 +296,7 @@ impl epi::App for SystemPlot {
                 }
                 if ui.button("Step").clicked() {
                     self.animate = false;
-                    system.update_system(self.time,self.delta);
+                    system.update_system(self.time, self.delta);
                     self.time += self.delta;
                 }
             });
@@ -323,7 +342,7 @@ impl epi::App for SystemPlot {
             if self.time >= self.max_time && self.clamped {
                 self.animate = false;
             } else {
-                self.system.update_system(self.time,self.delta);
+                self.system.update_system(self.time, self.delta);
                 self.time += self.delta;
             }
         }

@@ -14,8 +14,6 @@ fn main() {
 }
 
 #[cfg(wasm32)]
-fn main() { 
-}*/
 fn main() {
-    
-}
+}*/
+fn main() {}
