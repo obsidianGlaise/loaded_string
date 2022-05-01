@@ -1,11 +1,14 @@
-use eframe::egui::plot::*;
-use eframe::epaint::Color32;
-use eframe::{egui, epi};
+use std::f64::consts::PI;
 
+use eframe::egui::{plot::*, Ui};
+use eframe::epaint::{Color32};
+use eframe::{egui};
+
+const GREEN: Color32 = Color32::from_rgb(100, 200, 100);
 const RED: Color32 = Color32::from_rgb(255, 0, 0);
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
-#[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
-#[cfg_attr(feature = "persistence", serde(default))] // if we add new fields, give them default values when deserializing old state
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(default)] // if we add new fields, give them default values when deserializing old state
 #[derive(Debug, Clone, Copy)]
 struct Mass {
     pos: f64,
@@ -47,8 +50,8 @@ impl Mass {
     }
 }
 
-#[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
-#[cfg_attr(feature = "persistence", serde(default))] // if we add new fields, give them default values when deserializing old state
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(default)] // if we add new fields, give them default values when deserializing old state
 #[derive(Debug, Clone)]
 struct Sys {
     masses: Vec<Mass>,
@@ -86,12 +89,21 @@ impl Sys {
         }
     }
 
-    fn harmonic_state(&mut self, height: f64) {
+    fn parabola(&mut self, height: f64) {
         let base = if self.masses.len() % 2 == 0 { 0.5 } else { 0.0 };
         let spacing = (self.masses.len() + (self.masses.len() % 2)) as f64;
         for i in 0..self.masses.len() {
             let pos =
                 -1.0 / square(spacing / 2.0) * square(i as f64 + 1.0 - base - spacing / 2.0) + 1.0;
+            self.masses[i] = Mass::new(pos * height);
+        }
+    }
+    fn harmonic_state(&mut self, height: f64, state: i32) {
+        //let base = if self.masses.len() % 2 == 0 { 0.5 } else { 0.0 };
+        let spacing = (self.masses.len() + 1) as f64;
+        for i in 0..self.masses.len() {
+            let pos =
+                ((i+1) as f64/(spacing)*PI*(state as f64)).sin();
             self.masses[i] = Mass::new(pos * height);
         }
     }
@@ -120,8 +132,8 @@ fn square(val: f64) -> f64 {
 fn round(val: f64, rounding_factor: f64) -> f64 {
     f64::floor(val / rounding_factor) * rounding_factor
 }
-#[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
-#[cfg_attr(feature = "persistence", serde(default))] // if we add new fields, give them default values when deserializing old state
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(default)] // if we add new fields, give them default values when deserializing old state
 #[derive(Debug, Clone)]
 pub struct SystemPlot {
     animate: bool,
@@ -133,6 +145,11 @@ pub struct SystemPlot {
     clamped: bool,
     max_time: f64,
     delta: f64,
+    harmonic_value: i32,
+    display_colors: Vec<Color32>,
+    windowed: bool,
+    boundary_style: String,
+    width: f64,
 }
 
 impl Default for SystemPlot {
@@ -147,32 +164,51 @@ impl Default for SystemPlot {
             clamped: false,
             max_time: 100.0,
             delta: 0.1,
+            harmonic_value: 1,
+            display_colors: vec![RED,GREEN,GREEN],
+            windowed: false,
+            boundary_style: "line".to_string(),
+            width: 1.0,
         }
     }
 }
 
 impl SystemPlot {
-    fn line_points(&self) -> Line {
+    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        // This is also where you can customized the look at feel of egui using
+        // `cc.egui_ctx.set_visuals` and `cc.egui_ctx.set_fonts`.
+
+        // Load previous app state (if any).
+        // Note that you must enable the `persistence` feature for this to work.
+        cc.egui_ctx.set_visuals(egui::Visuals::dark());
+
+        if let Some(storage) = cc.storage {
+            return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
+        }
+
+        Default::default()
+    }
+
+    fn line_points(&self, width: f64) -> Line {
         let n = self.size;
         let points = (0..n + 2).map(|i| {
             if i == 0 || i == n + 1 {
-                Value::new((i as f64) / ((n + 1) as f64), 0.0)
+                Value::new(((i as f64) / ((n + 1) as f64))*width, 0.0)
             } else {
-                Value::new((i as f64) / ((n + 1) as f64), self.system.masses[i - 1].pos)
+                Value::new(((i as f64) / ((n + 1) as f64))*width, self.system.masses[i - 1].pos)
             }
         });
 
         Line::new(Values::from_values_iter(points))
-            .color(Color32::from_rgb(100, 200, 100))
             .style(LineStyle::Solid)
             .name("mass")
     }
 
-    fn circle_points(&self, radius: f32) -> Points {
+    fn circle_points(&self, radius: f32, width: f64) -> Points {
         let n = self.size;
         let circle = (0..n).map(|i| {
             Value::new(
-                (i as f64 + 1.0) / ((n + 1) as f64),
+                ((i as f64 + 1.0) / ((n + 1) as f64))*width,
                 self.system.masses[i].pos,
             )
         });
@@ -181,36 +217,169 @@ impl SystemPlot {
             .filled(true)
             .radius(radius)
             .shape(MarkerShape::Circle)
-            .color(Color32::from_rgb(100, 200, 100))
+    }
+
+    fn display(&mut self, ui: &mut Ui) {
+        ui.set_min_width(225.0);
+        ui.heading("Side Panel");
+        ui.label(format!("Time: {:.1}", self.time));
+        egui::CollapsingHeader::new("Basic Settings").show(ui, |ui| {
+            if ui.button("Reset").clicked() {
+                self.animate = false;
+                self.system = Sys::new(0, 10, 1.0);
+                self.size = 10;
+                self.time = 0.0;
+            }
+            ui.add(egui::Slider::new(&mut self.size, 1..=500).text("Masses"));
+            ui.horizontal(|ui| {
+                if ui.button("Increment").clicked() && self.size < 500 {
+                    self.size += 1;
+                }
+                if ui.button("Decrement").clicked() && self.size > 1 {
+                    self.size -= 1;
+                }
+            });
+            let time_response = ui.add(
+                egui::DragValue::new(&mut self.delta)
+                    .clamp_range(0.001..=0.750)
+                    .speed(0.001)
+                    .prefix("Delta: "),
+            );
+            if time_response.changed() {
+                self.animate = false;
+                self.system = Sys::new(0, self.size, 1.0);
+                self.time = 0.0;
+            }
+            
+            
+            ui.checkbox(&mut self.animate, "Animate");
+            if ui.button("Step").clicked() {
+                self.animate = false;
+                self.system.update_system(self.time, self.delta);
+                self.time += self.delta;
+            }
+        });
+
+        while self.size > self.system.masses.len() {
+            self.system.masses.push(Mass::new(0.0));
+        }
+        while self.size < self.system.masses.len() {
+            self.system.masses.pop();
+        }
+        egui::CollapsingHeader::new("Display Settings").show(ui, |ui| {
+            ui.add(
+                egui::DragValue::new(&mut self.radius)
+                    .speed(0.1)
+                    .clamp_range(0.0..=100.0)
+                    .prefix("Mass radius (display): "),
+            );
+            ui.add(
+                egui::DragValue::new(&mut self.width)
+                    .speed(0.1)
+                    .clamp_range(0.5..=100.0)
+                    .prefix("String length (display): "),
+            );
+
+            ui.horizontal(|ui| {
+                ui.label("Mass Color:");
+                ui.color_edit_button_srgba(&mut self.display_colors[2]);
+            });
+            ui.horizontal(|ui| {
+                ui.label("String Color:");
+                ui.color_edit_button_srgba(&mut self.display_colors[1]);
+            });
+            ui.horizontal(|ui| {
+                ui.label("Boundary Color:");
+                ui.color_edit_button_srgba(&mut self.display_colors[0]);
+            });
+            egui::ComboBox::from_label( "Boundary style")
+                .selected_text(format!("{}", self.boundary_style))
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut self.boundary_style, "line".to_string(), "Lines");
+                    ui.selectable_value(&mut self.boundary_style, "mass".to_string(), "Masses");
+                    ui.selectable_value(&mut self.boundary_style, "none".to_string(), "None");
+                });
+
+            if ui.button("Windowed").clicked() {
+                self.windowed = !self.windowed;
+            }
+            
+        });
+        egui::CollapsingHeader::new("Misc State Settings").show(ui, |ui| {
+            ui.add(
+                egui::DragValue::new(&mut self.initial_displacement)
+                    .speed(0.1)
+                    .clamp_range(0.0..=f64::INFINITY)
+                    .prefix("Initial Displacement: "),
+            );
+            let harmonic_response = ui.add(
+                egui::DragValue::new(&mut self.harmonic_value)
+                    .speed(0.01)
+                    .clamp_range(1..=8)
+                    .prefix("Harmonic State: "),
+            );
+            if harmonic_response.changed() {
+                self.animate = false;
+                self.system = Sys::new(0, self.size, 0.0);
+                self.time = 0.0;
+                self.system.harmonic_state(self.initial_displacement,self.harmonic_value);
+            }
+            ui.separator();
+            if ui.button("Harmonic").clicked() {
+                self.animate = false;
+                self.system = Sys::new(0, self.size, 0.0);
+                self.time = 0.0;
+                self.system.harmonic_state(self.initial_displacement,self.harmonic_value);
+            }
+            if ui.button("Parabolic").clicked() {
+                self.animate = false;
+                self.system = Sys::new(0, self.size, 0.0);
+                self.time = 0.0;
+                self.system.parabola(self.initial_displacement);
+            }
+            if ui.button("Pluck").clicked() {
+                self.animate = false;
+                self.system = Sys::new(0, self.size, 0.0);
+                self.time = 0.0;
+                self.system.pluck(self.initial_displacement);
+            }
+        });
+
+        egui::CollapsingHeader::new("Clamped Settings").show(ui, |ui| {
+            ui.add(
+                egui::DragValue::new(&mut self.max_time)
+                    .speed(0.1)
+                    .clamp_range(0.0..=f64::INFINITY)
+                    .prefix("Max Time: "),
+            );
+            ui.checkbox(&mut self.clamped, "Clamped");
+        });
+
+        egui::CollapsingHeader::new("Mass positions").show(ui, |ui| {
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                for i in 0..self.size {
+                    ui.add(
+                        egui::Slider::new(&mut self.system.masses[i].pos, -10.0..=10.0)
+                            .text(format!("{}: ", i)),
+                    );
+                }
+            })
+        });
+        egui::warn_if_debug_build(ui);
     }
 }
 
-impl epi::App for SystemPlot {
-    fn name(&self) -> &str {
-        "Loaded String Simulation"
+impl eframe::App for SystemPlot {
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        eframe::set_value(storage, eframe::APP_KEY, self);
     }
 
-    // Called once before the first frame.
-    fn setup(
-        &mut self,
-        _ctx: &egui::Context,
-        _frame: &epi::Frame,
-        _storage: Option<&dyn epi::Storage>,
-    ) {
-        // Load previous app state (if any).
-        // Note that you must enable the `persistence` feature for this to work.
-        #[cfg(feature = "persistence")]
-        if let Some(storage) = _storage {
-            *self = epi::get_value(storage, epi::APP_KEY).unwrap_or_default()
-        }
-    }
-
-    fn update(&mut self, ctx: &egui::Context, frame: &epi::Frame) {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         let Self {
             animate: _,
             time: _,
-            system,
-            size,
+            system: _,
+            size: _,
             ..
         } = self;
 
@@ -221,101 +390,38 @@ impl epi::App for SystemPlot {
                     if ui.button("Quit").clicked() {
                         frame.quit();
                     }
+                    if ui.button("Toggle Window").clicked() {
+                        self.windowed = !self.windowed;
+                    }
+                    if ui.button("Full Reset").clicked() {
+                        self.animate = false;
+                        self.time =  0.0;
+                        self.system = Sys::new(0, 10, 1.0);
+                        self.size = 10;
+                        self.radius = 5.0;
+                        self.initial_displacement = 1.0;
+                        self.clamped = false;
+                        self.max_time = 100.0;
+                        self.delta = 0.1;
+                        self.harmonic_value = 1;
+                        self.display_colors =  vec![RED,GREEN,GREEN];
+                        self.windowed = false;
+                        self.boundary_style = "line".to_string();
+                        self.width = 1.0;
+                    }
                 });
             });
         });
-
-        egui::SidePanel::left("side_panel").show(ctx, |ui| {
-            ui.set_min_width(225.0);
-            ui.heading("Side Panel");
-            ui.label(format!("Time: {:.1}", self.time));
-            egui::CollapsingHeader::new("Basic Settings").show(ui, |ui| {
-                if ui.button("Reset").clicked() {
-                    self.animate = false;
-                    *system = Sys::new(0, 10, 1.0);
-                    *size = 10;
-                    self.time = 0.0;
-                }
-                ui.add(egui::Slider::new(size, 1..=300).text("Masses"));
-                ui.horizontal(|ui| {
-                    if ui.button("Increment").clicked() && *size < 300 {
-                        *size += 1;
-                    }
-                    if ui.button("Decrement").clicked() && *size > 1 {
-                        *size -= 1;
-                    }
-                });
-                ui.add(
-                    egui::DragValue::new(&mut self.delta)
-                        .clamp_range(0.001..=0.750)
-                        .speed(0.001)
-                        .prefix("Delta: "),
-                );
-                ui.checkbox(&mut self.animate, "Animate");
-                if ui.button("Step").clicked() {
-                    self.animate = false;
-                    system.update_system(self.time, self.delta);
-                    self.time += self.delta;
-                }
+        if !self.windowed {
+            egui::SidePanel::left("side_panel").show(ctx, |ui| {
+                self.display(ui);
             });
-
-            while *size > system.masses.len() {
-                system.masses.push(Mass::new(0.0));
-            }
-            while *size < system.masses.len() {
-                system.masses.pop();
-            }
-            egui::CollapsingHeader::new("Display Settings").show(ui, |ui| {
-                ui.add(
-                    egui::DragValue::new(&mut self.radius)
-                        .speed(0.1)
-                        .clamp_range(0.0..=100.0)
-                        .prefix("Mass radius (display): "),
-                );
-            });
-            egui::CollapsingHeader::new("Misc State Settings").show(ui, |ui| {
-                ui.add(
-                    egui::DragValue::new(&mut self.initial_displacement)
-                        .speed(0.1)
-                        .clamp_range(0.0..=f64::INFINITY)
-                        .prefix("Initial Displacement: "),
-                );
-                if ui.button("First Harmonic").clicked() {
-                    self.animate = false;
-                    *system = Sys::new(0, *size, 0.0);
-                    self.time = 0.0;
-                    system.harmonic_state(self.initial_displacement);
-                }
-                if ui.button("Pluck").clicked() {
-                    self.animate = false;
-                    *system = Sys::new(0, *size, 0.0);
-                    self.time = 0.0;
-                    system.pluck(self.initial_displacement);
-                }
-            });
-
-            egui::CollapsingHeader::new("Clamped Settings").show(ui, |ui| {
-                ui.add(
-                    egui::DragValue::new(&mut self.max_time)
-                        .speed(0.1)
-                        .clamp_range(0.0..=f64::INFINITY)
-                        .prefix("Max Time: "),
-                );
-                ui.checkbox(&mut self.clamped, "Clamped");
-            });
-
-            egui::CollapsingHeader::new("Mass positions").show(ui, |ui| {
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    for i in 0..*size {
-                        ui.add(
-                            egui::Slider::new(&mut system.masses[i].pos, -10.0..=10.0)
-                                .text(format!("{}: ", i)),
-                        );
-                    }
-                })
-            });
-            egui::warn_if_debug_build(ui);
-        });
+        }
+        else {
+            egui::Window::new("Settings").show(ctx, |ui| {
+                self.display(ui);
+             });
+        }
 
         egui::CentralPanel::default().show(ctx, |ui| {
             if self.animate {
@@ -327,10 +433,22 @@ impl epi::App for SystemPlot {
                 .data_aspect(1.0);
 
             plot.show(ui, |plot_ui| {
-                plot_ui.line(self.line_points());
-                plot_ui.points(self.circle_points(self.radius));
-                plot_ui.vline(VLine::new(0).color(RED));
-                plot_ui.vline(VLine::new(1).color(RED));
+                plot_ui.line(self.line_points(self.width).color(self.display_colors[1]));
+                plot_ui.points(self.circle_points(self.radius,self.width).color(self.display_colors[2]));
+                if self.display_colors[0] != Color32::TRANSPARENT {
+                    if self.boundary_style == "line" {
+                        plot_ui.vline(VLine::new(0.0).color(self.display_colors[0]));
+                        plot_ui.vline(VLine::new(self.width).color(self.display_colors[0]));
+                    }
+                    else if self.boundary_style == "mass" {
+                        plot_ui.points(
+                            Points::new(Values::from_values(vec![Value::new(0.0, 0.0)]))
+                            .color(self.display_colors[0]).radius(4.0));
+                        plot_ui.points(
+                            Points::new(Values::from_values(vec![Value::new(self.width, 0.0)]))
+                            .color(self.display_colors[0]).radius(4.0));
+                    }
+                }
             });
         });
         if self.animate {
