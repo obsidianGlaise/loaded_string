@@ -1,8 +1,8 @@
 use std::f64::consts::PI;
 
+use eframe::egui;
 use eframe::egui::{plot::*, Ui};
-use eframe::epaint::{Color32};
-use eframe::{egui};
+use eframe::epaint::Color32;
 
 const GREEN: Color32 = Color32::from_rgb(100, 200, 100);
 const RED: Color32 = Color32::from_rgb(255, 0, 0);
@@ -102,8 +102,7 @@ impl Sys {
         //let base = if self.masses.len() % 2 == 0 { 0.5 } else { 0.0 };
         let spacing = (self.masses.len() + 1) as f64;
         for i in 0..self.masses.len() {
-            let pos =
-                ((i+1) as f64/(spacing)*PI*(state as f64)).sin();
+            let pos = ((i + 1) as f64 / (spacing) * PI * (state as f64)).sin();
             self.masses[i] = Mass::new(pos * height);
         }
     }
@@ -165,7 +164,7 @@ impl Default for SystemPlot {
             max_time: 100.0,
             delta: 0.1,
             harmonic_value: 1,
-            display_colors: vec![RED,GREEN,GREEN],
+            display_colors: vec![RED, GREEN, GREEN],
             windowed: false,
             boundary_style: "line".to_string(),
             width: 1.0,
@@ -193,9 +192,12 @@ impl SystemPlot {
         let n = self.size;
         let points = (0..n + 2).map(|i| {
             if i == 0 || i == n + 1 {
-                Value::new(((i as f64) / ((n + 1) as f64))*width, 0.0)
+                Value::new(((i as f64) / ((n + 1) as f64)) * width, 0.0)
             } else {
-                Value::new(((i as f64) / ((n + 1) as f64))*width, self.system.masses[i - 1].pos)
+                Value::new(
+                    ((i as f64) / ((n + 1) as f64)) * width,
+                    self.system.masses[i - 1].pos,
+                )
             }
         });
 
@@ -208,7 +210,7 @@ impl SystemPlot {
         let n = self.size;
         let circle = (0..n).map(|i| {
             Value::new(
-                ((i as f64 + 1.0) / ((n + 1) as f64))*width,
+                ((i as f64 + 1.0) / ((n + 1) as f64)) * width,
                 self.system.masses[i].pos,
             )
         });
@@ -250,8 +252,7 @@ impl SystemPlot {
                 self.system = Sys::new(0, self.size, 1.0);
                 self.time = 0.0;
             }
-            
-            
+
             ui.checkbox(&mut self.animate, "Animate");
             if ui.button("Step").clicked() {
                 self.animate = false;
@@ -292,8 +293,8 @@ impl SystemPlot {
                 ui.label("Boundary Color:");
                 ui.color_edit_button_srgba(&mut self.display_colors[0]);
             });
-            egui::ComboBox::from_label( "Boundary style")
-                .selected_text(format!("{}", self.boundary_style))
+            egui::ComboBox::from_label("Boundary style")
+                .selected_text(self.boundary_style.to_string())
                 .show_ui(ui, |ui| {
                     ui.selectable_value(&mut self.boundary_style, "line".to_string(), "Lines");
                     ui.selectable_value(&mut self.boundary_style, "mass".to_string(), "Masses");
@@ -303,7 +304,6 @@ impl SystemPlot {
             if ui.button("Windowed").clicked() {
                 self.windowed = !self.windowed;
             }
-            
         });
         egui::CollapsingHeader::new("Misc State Settings").show(ui, |ui| {
             ui.add(
@@ -322,14 +322,16 @@ impl SystemPlot {
                 self.animate = false;
                 self.system = Sys::new(0, self.size, 0.0);
                 self.time = 0.0;
-                self.system.harmonic_state(self.initial_displacement,self.harmonic_value);
+                self.system
+                    .harmonic_state(self.initial_displacement, self.harmonic_value);
             }
             ui.separator();
             if ui.button("Harmonic").clicked() {
                 self.animate = false;
                 self.system = Sys::new(0, self.size, 0.0);
                 self.time = 0.0;
-                self.system.harmonic_state(self.initial_displacement,self.harmonic_value);
+                self.system
+                    .harmonic_state(self.initial_displacement, self.harmonic_value);
             }
             if ui.button("Parabolic").clicked() {
                 self.animate = false;
@@ -395,7 +397,7 @@ impl eframe::App for SystemPlot {
                     }
                     if ui.button("Full Reset").clicked() {
                         self.animate = false;
-                        self.time =  0.0;
+                        self.time = 0.0;
                         self.system = Sys::new(0, 10, 1.0);
                         self.size = 10;
                         self.radius = 5.0;
@@ -404,7 +406,7 @@ impl eframe::App for SystemPlot {
                         self.max_time = 100.0;
                         self.delta = 0.1;
                         self.harmonic_value = 1;
-                        self.display_colors =  vec![RED,GREEN,GREEN];
+                        self.display_colors = vec![RED, GREEN, GREEN];
                         self.windowed = false;
                         self.boundary_style = "line".to_string();
                         self.width = 1.0;
@@ -416,11 +418,10 @@ impl eframe::App for SystemPlot {
             egui::SidePanel::left("side_panel").show(ctx, |ui| {
                 self.display(ui);
             });
-        }
-        else {
+        } else {
             egui::Window::new("Settings").show(ctx, |ui| {
                 self.display(ui);
-             });
+            });
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -434,19 +435,25 @@ impl eframe::App for SystemPlot {
 
             plot.show(ui, |plot_ui| {
                 plot_ui.line(self.line_points(self.width).color(self.display_colors[1]));
-                plot_ui.points(self.circle_points(self.radius,self.width).color(self.display_colors[2]));
+                plot_ui.points(
+                    self.circle_points(self.radius, self.width)
+                        .color(self.display_colors[2]),
+                );
                 if self.display_colors[0] != Color32::TRANSPARENT {
                     if self.boundary_style == "line" {
                         plot_ui.vline(VLine::new(0.0).color(self.display_colors[0]));
                         plot_ui.vline(VLine::new(self.width).color(self.display_colors[0]));
-                    }
-                    else if self.boundary_style == "mass" {
+                    } else if self.boundary_style == "mass" {
                         plot_ui.points(
                             Points::new(Values::from_values(vec![Value::new(0.0, 0.0)]))
-                            .color(self.display_colors[0]).radius(4.0));
+                                .color(self.display_colors[0])
+                                .radius(4.0),
+                        );
                         plot_ui.points(
                             Points::new(Values::from_values(vec![Value::new(self.width, 0.0)]))
-                            .color(self.display_colors[0]).radius(4.0));
+                                .color(self.display_colors[0])
+                                .radius(4.0),
+                        );
                     }
                 }
             });
