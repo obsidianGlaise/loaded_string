@@ -1,28 +1,40 @@
-# Loaded String
+# Loaded String Simulation
 
 Simple physics simulation of loaded string using verlet integration and nearest-neighbor interaction to dictate forces.
 
-## Outline of Functions
-1. Basic function
-You can directly manipulate the position of each mass. You can also directly alter the number of masses on the string.
+## Outline of Settings
+1. Basic Settings
+    - Reset: resets the dynamics of the system but doesn't affect the display settings.
+    - Masses: alters the number of simulated masses. The number can be directly altered with the slider, by clicking on the number of masses or using the increment and decrement buttons.
+    - Delta: alters the timestep of the simulation. Ranges from 0.001 to 0.75 (inclusive). Larger timesteps run faster than smaller timesteps. Altering the timestep causes the simulation to reset to avoid odd behavior.
+    - Animate: starts or stops the animation of the plot.
+    - Step: continues the simulation by a single time-step. Even if the simulation run-time is clamped, step will still function.
 
-2. Reset
-You can reset the system (size, masses, accelerations, time, animate is set to false).
-Things that (currently) don't reset: Delta and Clamped Time.
+2. Display Settings
+    - Mass radius: the display size of the masses on the string.
+    - String length: the display length of the string.
+    - Mass color: the color of the masses on the string.
+    - String color: the color of the string itself.
+    - Boundary color: the color of the boundary.
+    - Boundary style: the type of boundary used by the simulation (lines, fixed masses, none). Purely display (no physical effect on the simulation).
+    - Windowed: the side panel is its own window or part of the main window.
 
-3. Delta
-You can alter the timestep of the system. A smaller timestep causes the simulation to run more slowly.
-After altering the timestep, it is recommended to reset the system as the simulation isn't accurate after the delta is adjusted.
+3. Misc State Settings
+    - Initial displacement: sets the max point for the harmonic, parabolic, and pluck functions.
+    - Harmonic state: sets the harmonic state for the harmonic function.
+    - Harmonic: initializes the system of the given size in a harmonic state.
+    - Parabolic: initializes the system of the given size in a parabolic state.
+    - Pluck: initializes the system of the given size in a pluck state.
 
-4. Increment and Decrement
-Increment and decrement the number of masses by 1. Clamped to 1..300 (inclusive of both sides)
+4. Clamped Settings
+    - Max time: maximum time the simulation will run for while clamped.
+    - Clamped: whether the simulation runtime is clamped or not.
 
-5. Harmonic State (WIP)
-Sets the position of each mass according to the first fundamental harmonic. 
-Initial displacement sets the peak. Clicking start will set each mass to their position, set time = 0, and animate = false.
+5. Mass Positions
+Displays the position of each mass on the loaded string and allows you to modify the position of each mass individually, even while the simulation is running.
 
-6. Mass radius
-Purely for display purpose. Adjust to better see the dynamics of each individual mass.
-
-7. Step
-Stop animating if animating and move by a single time step (delta). Even if clamped, step still works (though animate does not).
+6. Menu Options
+Under file, there are three options: 
+    1. Quit: Closes the window for the native windows binary. Doesn't display any effect for the Web application.
+    2. Toggle Window: Another option to toggle the windowed side panel.
+    3. Full reset: Fully resets the simulation (system dynamics, display settings, clamped settings, etc.)

@@ -1,5 +1,7 @@
-#[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
-#[cfg_attr(feature = "persistence", serde(default))] // if we add new fields, give them default values when deserializing old state
+use std::f64::consts::PI;
+
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(default)] // if we add new fields, give them default values when deserializing old state
 #[derive(Debug, Clone, Copy)]
 struct Mass {
     pos: f64,
@@ -34,7 +36,6 @@ impl Mass {
             self.pos = 2.0 * cur - self.past_pos + self.accel * square(delta);
             self.past_pos = cur;
         }
-        //if f64::abs(self.pos) > 1.0 { println!("Mass exceeded initial displacement"); }
     }
 
     fn update_acceleration(&mut self, l_pos: f64, r_pos: f64) {
@@ -42,8 +43,8 @@ impl Mass {
     }
 }
 
-#[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
-#[cfg_attr(feature = "persistence", serde(default))] // if we add new fields, give them default values when deserializing old state
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(default)] // if we add new fields, give them default values when deserializing old state
 #[derive(Debug, Clone)]
 pub struct Sys {
     masses: Vec<Mass>,
@@ -58,9 +59,17 @@ impl Sys {
         new_system
     }
 
-    pub fn update_system(&mut self, time_step: f64, delta: f64) {
+    pub fn push(&mut self, displacement: f64) {
+        self.masses.push(Mass::new(displacement));
+    }
+
+    pub fn pop(&mut self) {
+        self.masses.pop();
+    }
+
+    pub fn update_system(&mut self, time_step: &mut f64, delta: f64) {
         for i in 0..self.masses.len() {
-            self.masses[i].update_position(time_step, delta);
+            self.masses[i].update_position(*time_step, delta);
         }
         for i in 0..self.masses.len() {
             if i == 0 {
@@ -79,9 +88,18 @@ impl Sys {
                 self.masses[i].update_acceleration(l, r);
             }
         }
+        *time_step += delta;
     }
 
-    pub fn harmonic_state(&mut self, height: f64) {
+    pub fn get_mass_pos(&self, mass: usize) -> f64 {
+        self.masses[mass].pos
+    }
+
+    pub fn len(&self) -> usize {
+        self.masses.len()
+    }
+
+    pub fn parabola(&mut self, height: f64) {
         let base = if self.masses.len() % 2 == 0 { 0.5 } else { 0.0 };
         let spacing = (self.masses.len() + (self.masses.len() % 2)) as f64;
         for i in 0..self.masses.len() {
@@ -89,6 +107,26 @@ impl Sys {
                 -1.0 / square(spacing / 2.0) * square(i as f64 + 1.0 - base - spacing / 2.0) + 1.0;
             self.masses[i] = Mass::new(pos * height);
         }
+    }
+    pub fn harmonic_state(&mut self, height: f64, state: i32) {
+        let spacing = (self.masses.len() + 1) as f64;
+        for i in 0..self.masses.len() {
+            let pos = ((i + 1) as f64 / (spacing) * PI * (state as f64)).sin();
+            self.masses[i] = Mass::new(pos * height);
+        }
+    }
+
+    pub fn pluck(&mut self, height: f64) {
+        let n = self.masses.len();
+        for i in 0..n {
+            let pos = -2.0 * f64::abs(((i + 1) as f64 / (n as f64 + 1.0)) - 0.5) + 1.0;
+
+            self.masses[i] = Mass::new(pos * height);
+        }
+    }
+
+    pub fn alter(&mut self, i: usize, displacement: f64) {
+        self.masses[i].pos = displacement;
     }
 }
 
@@ -100,6 +138,9 @@ impl Default for Sys {
     }
 }
 
-fn square(val: f64) -> f64 {
+pub fn square(val: f64) -> f64 {
     val * val
+}
+pub fn round(val: f64, rounding_factor: f64) -> f64 {
+    f64::floor(val / rounding_factor) * rounding_factor
 }
